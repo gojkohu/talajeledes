@@ -1,0 +1,759 @@
+<title>Talajéledés</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: terepnapló. Fejléc + mérőműszer-sáv, bal oldalt a 8x8-as talajtáblázat és az eszköztár, jobbra a mintavételi lap és a napló. Telefonon egy oszlop. */
+:root{
+  --bg:#e4e9dc; --panel:#f2f5ec; --ink:#17211a; --muted:#566457; --line:#c3ccb9;
+  --accent:#2e7a3a; --accent-ink:#ffffff; --warn:#a2600c; --bad:#b03a2a; --soil:#2c1e15; --sel:#e9f0df;
+  --f-d:'Archivo',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-m:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f140e; --panel:#182016; --ink:#e1e8d9; --muted:#95a291; --line:#2c372a;
+    --accent:#8bcf62; --accent-ink:#0d1a07; --warn:#e0a040; --bad:#ef7a68; --soil:#0a0d09; --sel:#202b1d; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f140e; --panel:#182016; --ink:#e1e8d9; --muted:#95a291; --line:#2c372a;
+  --accent:#8bcf62; --accent-ink:#0d1a07; --warn:#e0a040; --bad:#ef7a68; --soil:#0a0d09; --sel:#202b1d; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-d);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 28px}
+.app{max-width:1060px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+button{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer;min-height:34px}
+button:hover{border-color:var(--accent)}
+button:focus-visible,canvas:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:default}
+.lbl{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.num{font-family:var(--f-m);font-variant-numeric:tabular-nums}
+h1{font-size:30px;line-height:1;margin:0;font-weight:800;letter-spacing:-.02em}
+h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:600}
+.top{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:flex-end;justify-content:space-between}
+.top p{margin:4px 0 0;color:var(--muted)}
+.clock{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.date{font-family:var(--f-m);font-size:15px;min-width:150px}
+.speed{display:flex;gap:4px}
+.topbtns{display:flex;gap:6px}
+.hud{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px 20px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding-block:12px}
+.shiHead{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.shiHead .num{font-size:26px;font-weight:500}
+.shiHead .tgt{color:var(--muted);font-size:12px}
+.meter{position:relative;height:12px;background:var(--sel);border:1px solid var(--line);margin-top:6px}
+.meter i{position:absolute;inset:0 auto 0 0;background:var(--accent);width:0;transition:width .4s}
+.meter b{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink)}
+.hold{display:flex;gap:3px;margin-top:6px;align-items:center;font-size:12px;color:var(--muted)}
+.hold{flex-wrap:wrap}
+.hold .pip{width:16px;height:6px;background:var(--sel);border:1px solid var(--line)}
+.hold .pip.on{background:var(--accent);border-color:var(--accent)}
+.energy .num{font-size:26px;font-weight:500;display:block}
+.energy .sub{font-size:12px;color:var(--muted)}
+.chips{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:flex;align-items:center;gap:4px;font-size:12px;padding:2px 8px 2px 3px;border:1px solid var(--line);color:var(--muted);border-radius:999px}
+.chip img{width:22px;height:22px;opacity:.35;filter:grayscale(1)}
+.chip.on{color:var(--ink);border-color:var(--accent)}
+.chip.on img{opacity:1;filter:none}
+.layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;align-items:start}
+.board{background:var(--soil);padding:6px;border:1px solid var(--line)}
+canvas{display:block;width:100%;aspect-ratio:1;touch-action:manipulation;cursor:pointer}
+.views{display:flex;gap:4px;overflow-x:auto;padding-block:8px 2px}
+.views button{white-space:nowrap;flex:none;min-height:30px;padding:3px 10px;font-size:13px}
+.legend{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);min-height:20px}
+.legend i{flex:1;max-width:220px;height:8px;border:1px solid var(--line)}
+#toast{min-height:22px;font-size:13px;color:var(--warn);padding-top:4px}
+.palette{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.pg{display:flex;flex-direction:column;gap:4px}
+.prow{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.tool{flex:none;width:86px;display:flex;flex-direction:column;align-items:center;gap:0;padding:4px 4px 5px;text-align:center;line-height:1.15}
+.tool img{width:40px;height:40px;background:var(--soil);border-radius:3px}
+.tool .nm{font-size:12px;font-weight:600;margin-top:3px}
+.tool .co{font-family:var(--f-m);font-size:11px;opacity:.8}
+.panel{background:var(--panel);border:1px solid var(--line);padding:14px}
+.right{display:flex;flex-direction:column;gap:14px;min-width:0}
+.insp-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.insp-h b{font-size:18px}
+.rows{display:grid;gap:7px;margin:10px 0}
+.row{display:grid;grid-template-columns:118px 1fr 74px;gap:8px;align-items:center;font-size:13px}
+.row .bar{height:7px;background:var(--sel);border:1px solid var(--line);position:relative}
+.row .bar i{position:absolute;inset:0 auto 0 0}
+.row .v{font-family:var(--f-m);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.good{background:var(--accent)}.mid{background:var(--warn)}.bad{background:var(--bad)}
+.req{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:3px;font-size:13px}
+.req li{display:grid;grid-template-columns:18px 1fr auto;gap:6px}
+.req .ok{color:var(--accent)}.req .no{color:var(--bad)}
+.req .hv{font-family:var(--f-m);font-size:12px;color:var(--muted)}
+.sub-h{margin-top:12px}
+.verdict{margin-top:8px;font-size:13px}
+.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600;width:100%;margin-top:10px}
+#log{list-style:none;margin:0;padding:0;max-height:230px;overflow-y:auto;font-size:13px;display:grid;gap:5px}
+#log li{display:grid;grid-template-columns:54px 1fr;gap:6px}
+#log .t{font-family:var(--f-m);font-size:11px;color:var(--muted)}
+#log .bad{background:none;color:var(--bad)}#log .good{background:none;color:var(--accent)}
+.overlay{position:fixed;inset:0;background:rgba(8,12,7,.72);z-index:20;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;
+  padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.overlay[hidden]{display:none}
+.tool{width:96px}.tool .nm{font-size:11.5px;overflow-wrap:anywhere;hyphens:auto}
+.card{background:var(--bg);border:1px solid var(--line);max-width:760px;width:100%;padding:22px;margin-block:auto}
+.card h2.big{font-size:26px;text-transform:none;letter-spacing:-.01em;color:var(--ink);margin:0 0 8px;font-weight:800;line-height:1.1}
+.card p{margin:0 0 10px;max-width:62ch}
+.how{display:grid;gap:6px;margin:12px 0 16px;padding:0;list-style:none}
+.how li{padding-left:14px;position:relative;max-width:62ch}
+.how li::before{content:"–";position:absolute;left:0;color:var(--muted)}
+.scs{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+.scs button{text-align:left;padding:12px;display:flex;flex-direction:column;gap:6px;height:100%}
+.scs b{font-size:16px}
+.scs span{font-size:13px;color:var(--muted)}
+.scs em{font-style:normal;font-family:var(--f-m);font-size:11px;color:var(--accent)}
+.codex{display:grid;gap:12px;margin-top:12px}
+.codex article{border-top:1px solid var(--line);padding-top:10px;display:grid;grid-template-columns:48px 1fr;gap:4px 12px}
+.codex img{width:44px;height:44px;background:var(--soil);border-radius:3px;grid-row:span 3}
+.codex h3{margin:0;font-size:15px}
+.codex p{margin:0;font-size:13px;color:var(--muted)}
+.codex .rq{font-family:var(--f-m);font-size:12px;color:var(--ink)}
+.endstats{display:flex;flex-wrap:wrap;gap:6px 24px;margin:12px 0}
+.endstats div{display:flex;flex-direction:column}
+.endstats .num{font-size:22px}
+.btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.btnrow button{min-width:120px}
+@media (max-width:860px){
+  .layout{grid-template-columns:minmax(0,1fr)}
+  .hud{grid-template-columns:minmax(0,1fr)}
+  h1{font-size:26px}
+}
+@media (max-width:420px){
+  .row{grid-template-columns:96px 1fr 62px}
+}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>Talajéledés</h1>
+      <p id="siteLine">Válassz egy terepet.</p>
+    </div>
+    <div class="clock">
+      <div class="date num" id="dateLbl">—</div>
+      <div class="speed" role="group" aria-label="Időzítés">
+        <button id="bPause" aria-pressed="true">Szünet</button>
+        <button id="b1" aria-pressed="false">1×</button>
+        <button id="b3" aria-pressed="false">3×</button>
+        <button id="bStep">+1 hónap</button>
+      </div>
+      <div class="topbtns">
+        <button id="bCodex">Tudástár</button>
+        <button id="bMenu">Terepek</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="hud" aria-label="Állapot">
+    <div>
+      <div class="shiHead"><span class="lbl">Talajegészség-index</span><span class="num" id="shiNum">0</span><span class="tgt" id="shiTgt"></span></div>
+      <div class="meter"><i id="shiFill"></i><b id="shiMark"></b></div>
+      <div class="hold" id="hold"></div>
+    </div>
+    <div class="energy">
+      <span class="lbl">Bioenergia</span>
+      <span class="num" id="enNum">0</span>
+      <span class="sub" id="enSub"></span>
+    </div>
+    <div class="chips" id="chips" aria-label="Megtelepedett fajok"></div>
+  </section>
+
+  <div class="layout">
+    <div class="left">
+      <div class="board"><canvas id="cv" tabindex="0" role="img" aria-label="Talajtérkép, 8 x 8 cella. Nyilakkal mozoghatsz, Enterrel telepítesz."></canvas></div>
+      <div class="views" id="views" role="group" aria-label="Nézet"></div>
+      <div class="legend" id="legend"></div>
+      <div id="toast" role="status" aria-live="polite"></div>
+      <div class="palette" id="palette"></div>
+    </div>
+    <aside class="right">
+      <section class="panel" id="insp" aria-label="Mintavételi lap"></section>
+      <section class="panel"><h2>Napló</h2><ol id="log"></ol></section>
+    </aside>
+  </div>
+</div>
+
+<div class="overlay" id="ovStart">
+  <div class="card">
+    <h2 class="big">Mérgezett talaj, élő talaj</h2>
+    <p>Egy elpusztított ipari terepet kell visszaadnod az élőknek. Minden lépés biológia: a fajok csak akkor élnek meg, ha a cella kémiája és a szomszédai megadják, amire szükségük van.</p>
+    <ul class="how">
+      <li>Koppints egy cellára: megmutatja a talaj mért értékeit. Válassz eszközt, és a lap kiírja, mi hiányzik a telepítéshez.</li>
+      <li>Telepítéshez koppints ugyanarra a cellára még egyszer, vagy használd a gombot a lapon.</li>
+      <li>Ha egy faj feltételei nem teljesülnek, legyengül és elpusztul. A rá épülő fajok vele együtt dőlhetnek.</li>
+      <li>A játék szünetel, amíg el nem indítod. A nézetekkel (Olaj, Fém, pH...) a talaj rejtett állapotát is látod.</li>
+    </ul>
+    <div class="scs" id="scs"></div>
+  </div>
+</div>
+
+<div class="overlay" id="ovEnd" hidden>
+  <div class="card" id="endCard"></div>
+</div>
+
+<div class="overlay" id="ovCodex" hidden>
+  <div class="card">
+    <h2 class="big">Tudástár</h2>
+    <p>Fajok és talajjavítók. Az igények a telepítés helyén, a cellában mért értékekre vonatkoznak.</p>
+    <div class="codex" id="codex"></div>
+    <div class="btnrow"><button id="bCodexClose" class="primary" style="width:auto">Bezár</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+const W=8,H=8,N=W*H;
+const MONTHS=['január','február','március','április','május','június','július','augusztus','szeptember','október','november','december'];
+const ACT=[.25,.3,.5,.8,1,1,1,1,.9,.7,.4,.25];
+const EVAP=[.6,.7,1.2,1.8,2.4,3.0,3.4,3.2,2.4,1.6,.9,.6];
+const LBL={om:'Szerves anyag',n:'Nitrogén',water:'Víz',ph:'pH',org:'Olajszennyezés',met:'Hozzáférhető fém'};
+const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $=s=>document.querySelector(s);
+const clamp=(x,a,b)=>x<a?a:x>b?b:x;
+const R=(k,min,max)=>({k,min,max});
+
+const SPECIES=[
+ {id:'psz',name:'Pszeudomonasz',group:'Mikrobák és gombák',kind:'microbe',cost:3,icon:'bact',spread:.06,
+  role:'Szénhidrogén-bontó baktérium. Az olajat táplálékként használja, ezért a szennyezett cellában érzi jól magát.',
+  reqs:[R('water',20),R('ph',5.5,9),R('met',null,60)]},
+ {id:'perje',name:'Perje',group:'Növények',kind:'plant',cost:2,icon:'grass',spread:.08,
+  role:'Pionír fűféle. Szívós, sűrű gyökérzetével megköti a talajt, és az első szerves anyagot adja.',
+  reqs:[R('om',4),R('water',15),R('ph',4.8,9),R('org',null,65),R('met',null,70)]},
+ {id:'lohere',name:'Lóhere',group:'Növények',kind:'plant',cost:3,icon:'clover',spread:.05,
+  role:'Pillangós növény, gyökérgümőiben Rhizobium baktériumok élnek. Megköti a levegő nitrogénjét, és a környező talajnak is jut belőle.',
+  reqs:[R('om',12),R('water',25),R('ph',5.5,8.5),R('org',null,45),R('met',null,55)]},
+ {id:'napraf',name:'Napraforgó',group:'Növények',kind:'plant',cost:3,icon:'sun',
+  role:'Fitoextrakció: gyökerével nehézfémeket vesz fel a talajból. Gyorsan nő, de táplálékot és vizet kér.',
+  reqs:[R('om',10),R('n',8),R('water',25),R('ph',5),R('org',null,50),R('met',null,85)]},
+ {id:'fuzfa',name:'Fűzfa',group:'Növények',kind:'plant',cost:5,icon:'willow',
+  role:'A Salix nemzetség erős fémfelvevő. Sok vizet párologtat, ezért a szomszédos cellák is szárazabbak lesznek mellette. Lombja sok szerves anyagot ad.',
+  reqs:[R('om',20),R('n',12),R('water',40),R('ph',5.5),R('org',null,40),R('met',null,75)]},
+ {id:'myco',name:'Mikorrhiza gomba',group:'Mikrobák és gombák',kind:'fungus',cost:4,icon:'myco',
+  role:'Gombafonalak hálózata. Nitrogént és vizet visz a szomszédos növényeknek, és a növények jobban tűrik mellette a szennyezést. Gazdanövény nélkül elpusztul.',
+  reqs:[R('om',15),R('ph',4.5,8),R('org',null,30),R('met',null,45),{nb:'plant',label:'Szomszédos növény'}]},
+ {id:'giliszta',name:'Giliszta',group:'Állatok',kind:'animal',cost:5,icon:'worm',spread:.02,
+  role:'Átforgatja és szellőzteti a talajt, humuszt kever. Nagyon érzékeny a szennyezésre és a savanyúságra.',
+  reqs:[R('om',30),R('water',30),R('ph',5.5,8),R('org',null,15),R('met',null,25)]},
+ {id:'bogar',name:'Ganajtúró bogár',group:'Állatok',kind:'animal',cost:5,icon:'beetle',
+  role:'Szerves törmeléket temet a talajba, így szerves anyagot és nitrogént juttat a mélyebb rétegekbe. Növényzet nélkül nincs mit ennie.',
+  reqs:[R('om',25),R('water',20),R('org',null,20),R('met',null,30),{nb:'plant',label:'Szomszédos növény'}]},
+ {id:'nyir',name:'Nyír',group:'Növények',kind:'plant',cost:6,icon:'birch',
+  role:'Pionír fa, a késői szakasz jele. Árnyékot ad, sok szerves anyagot hullat, de csak kész talajban él meg, és szüksége van mikorrhizára.',
+  reqs:[R('om',35),R('n',25),R('water',30),R('ph',4.5,7.5),R('org',null,10),R('met',null,30),{nb:'myco',label:'Szomszédos mikorrhiza'}]}
+];
+const SID={};SPECIES.forEach((s,i)=>SID[s.id]=i);
+const TOOLS=[
+ {id:'inspect',name:'Vizsgál',group:'Eszköz',icon:'inspect',cost:0,role:'Cella kiválasztása, nincs költsége.'},
+ {id:'lime',name:'Mész',group:'Talajjavítás',icon:'lime',cost:2,role:'Emeli a pH-t (+1,4 a cellában, +0,5 a szomszédokban). Savas talajban a fémek mozgékonyabbak és mérgezőbbek.'},
+ {id:'compost',name:'Komposzt',group:'Talajjavítás',icon:'compost',cost:3,role:'Szerves anyagot és nitrogént ad, vizet köt, és a szennyezést 8%-kal hígítja. A szerves anyag megköti a fémeket is.'},
+ {id:'water',name:'Locsolás',group:'Talajjavítás',icon:'drop',cost:1,role:'Vizet ad a cellának és a szomszédainak. Szárazságban életmentő.'},
+ {id:'remove',name:'Kiszed',group:'Eszköz',icon:'remove',cost:0,role:'Eltávolítja a cellában élő fajt.'}
+];
+SPECIES.forEach((s,i)=>TOOLS.push({id:s.id,name:s.name,group:s.group,icon:s.icon,cost:s.cost,sp:i,role:s.role}));
+const toolIdx={};TOOLS.forEach((t,i)=>toolIdx[t.id]=i);
+
+const SC=[
+ {id:'olaj',name:'Elhagyott benzinkút',diff:'Könnyű',target:62,max:120,seed:11,start:3,acid:false,
+  blurb:'Szivárgó tartályok alatt olajfoltos talaj. A szennyezés nagy része szerves, a fémek kevések.',
+  om:[2,6],n:[2,5],water:[26,34],ph:[6.9,7.5],org:{base:14,peak:80,blobs:3,r:2.6},met:{base:2,peak:14,blobs:1,r:2}},
+ {id:'salak',name:'Cinkkohó salakhányója',diff:'Közepes',target:60,max:144,seed:23,start:3,acid:false,
+  blurb:'Kopár, fémekkel átitatott salak. A növények gyökerei csak akkor élnek, ha valaki előbb talajt készít nekik.',
+  om:[1,4],n:[1,4],water:[24,32],ph:[5.4,6.2],org:{base:2,peak:6,blobs:1,r:2},met:{base:20,peak:70,blobs:3,r:2.6}},
+ {id:'meddo',name:'Savas bányameddő',diff:'Nehéz',target:55,max:168,seed:37,start:3,acid:true,
+  blurb:'Pirit-oxidáció miatt pH 4 alatti talaj, a fémek így különösen mozgékonyak. A kémia megfordítása nélkül semmi nem él meg.',
+  om:[0,2],n:[0,2],water:[16,22],ph:[3.6,4.5],org:{base:4,peak:25,blobs:2,r:2},met:{base:18,peak:50,blobs:3,r:2.6}}
+];
+const NEED_SPECIES=5, HOLD_NEED=6;
+
+/* ---------- state ---------- */
+let S,occ,hp,stress,reason,D,sc,month,energy,hold,established,logArr,over,speed=0,timer=null,selected=-1,tool=0,view='soil',lastIncome=0,msgT=null,shi=0;
+const NBR=[];
+for(let i=0;i<N;i++){const x=i%W,y=(i/W)|0,a=[];if(x>0)a.push(i-1);if(x<W-1)a.push(i+1);if(y>0)a.push(i-W);if(y<H-1)a.push(i+W);NBR.push(a);}
+
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+
+function makeField(def,rnd){
+  const v=new Float32Array(N);
+  if(Array.isArray(def)){for(let i=0;i<N;i++)v[i]=def[0]+(def[1]-def[0])*rnd();return v;}
+  for(let i=0;i<N;i++)v[i]=def.base*(.7+.6*rnd());
+  for(let b=0;b<def.blobs;b++){
+    const cx=rnd()*(W-1),cy=rnd()*(H-1),rad=def.r*(.8+.5*rnd()),pk=def.peak*(.75+.35*rnd());
+    for(let i=0;i<N;i++){const dx=i%W-cx,dy=((i/W)|0)-cy;v[i]+=pk*Math.exp(-(dx*dx+dy*dy)/(2*(rad/1.5)*(rad/1.5)));}
+  }
+  for(let i=0;i<N;i++)v[i]=clamp(v[i],0,100);
+  return v;
+}
+
+function newGame(id){
+  sc=SC.find(x=>x.id===id);
+  const rnd=mulberry(sc.seed);
+  S={om:makeField(sc.om,rnd),n:makeField(sc.n,rnd),water:makeField(sc.water,rnd),ph:makeField(sc.ph,rnd),org:makeField(sc.org,rnd),met:makeField(sc.met,rnd)};
+  occ=new Int8Array(N).fill(-1);hp=new Float32Array(N);stress=new Uint8Array(N);reason=new Array(N).fill('');
+  D={om:new Float32Array(N),n:new Float32Array(N),water:new Float32Array(N),org:new Float32Array(N),met:new Float32Array(N)};
+  month=0;energy=45;hold=0;established=new Set();logArr=[];over=false;selected=-1;lastIncome=1.2;
+  setSpeed(0);
+  $('#siteLine').textContent=sc.name+' · '+sc.diff;
+  log('Megérkeztél a terepre: '+sc.name+'. Kezdd mintavétellel.','');
+  ui();
+}
+
+/* ---------- soil model ---------- */
+function effMet(i){const p=S.ph[i];const a=p<4.5?1.6:p<5.5?1.3:1;return S.met[i]*a*(1-.35*Math.min(S.om[i],50)/50);}
+function val(i,k){return k==='met'?effMet(i):S[k][i];}
+function hasNbSp(i,sid){for(const j of NBR[i])if(occ[j]===sid&&hp[j]>20)return true;return false;}
+function hasNbKind(i,kind){for(const j of NBR[i])if(occ[j]>=0&&SPECIES[occ[j]].kind===kind&&hp[j]>20)return true;return false;}
+
+function evaluate(sp,i){
+  const assist=sp.kind==='plant'&&hasNbSp(i,SID.myco);
+  const out=[];
+  for(const r of sp.reqs){
+    if(r.nb){const ok=r.nb==='plant'?hasNbKind(i,'plant'):hasNbSp(i,SID[r.nb]);out.push({r,ok,nb:true,label:r.label});continue;}
+    const v=val(i,r.k);let min=r.min,max=r.max,helped=false;
+    if(assist){
+      if(r.k==='water'&&min!=null){min-=10;helped=true;}
+      if(r.k==='n'&&min!=null){min-=5;helped=true;}
+      if((r.k==='org'||r.k==='met')&&max!=null){max+=10;helped=true;}
+    }
+    out.push({r,ok:(min==null||v>=min)&&(max==null||v<=max),v,min,max,helped,label:LBL[r.k]});
+  }
+  return out;
+}
+const fmt=(k,v)=>k==='ph'?v.toFixed(1):String(Math.round(v));
+function needTxt(e){
+  if(e.nb)return e.label;
+  const k=e.r.k;
+  if(e.min!=null&&e.max!=null)return e.label+' '+fmt(k,e.min)+'–'+fmt(k,e.max);
+  return e.label+(e.min!=null?' ≥ '+fmt(k,e.min):' ≤ '+fmt(k,e.max));
+}
+
+function cellSHI(i){
+  const T=Math.max(S.org[i],effMet(i));
+  const tox=Math.pow(clamp(1-T/50,0,1),1.5);
+  const o=clamp(S.om[i]/45,0,1),nn=clamp(S.n[i]/40,0,1);
+  const p=S.ph[i];
+  const pp=p>=5.8&&p<=7.6?1:p<5.8?clamp((p-4)/1.8,0,1):clamp((9-p)/1.4,0,1);
+  const w=clamp(S.water[i]/45,0,1);
+  const life=occ[i]>=0&&hp[i]>=50?1:0;
+  return .25*tox+.25*o+.15*nn+.10*pp+.05*w+.20*life;
+}
+function globalSHI(){let s=0;for(let i=0;i<N;i++)s+=cellSHI(i);return s/N*100;}
+function aliveSet(){const s=new Set();for(let i=0;i<N;i++)if(occ[i]>=0&&hp[i]>=50)s.add(occ[i]);return s;}
+const cname=i=>'('+((i%W)+1)+'. oszlop, '+(((i/W)|0)+1)+'. sor)';
+
+function addFx(i,key,self,nb){D[key][i]+=self;if(nb)for(const j of NBR[i])D[key][j]+=nb;}
+
+function tick(){
+  if(over)return;
+  month++;
+  const mi=(sc.start+month-1)%12,f=ACT[mi];
+  for(const k in D)D[k].fill(0);
+  // időjárás
+  let rain=0;
+  if(Math.random()<.45)rain=4+Math.random()*8;
+  let drought=0;
+  if(mi>=5&&mi<=7&&Math.random()<.08){drought=6;log('Aszályos hónap: a talaj gyorsan szárad.','bad');}
+  // abiotikus folyamatok
+  for(let i=0;i<N;i++){
+    const plant=occ[i]>=0&&SPECIES[occ[i]].kind==='plant';
+    const evap=Math.max(0,EVAP[mi]*(1.2-S.om[i]/150-(plant?.25:0)));
+    let w=S.water[i]-evap-drought+rain;
+    w=Math.min(w,40+S.om[i]*.8);
+    S.water[i]=clamp(w,0,100);
+    S.org[i]=Math.max(0,S.org[i]-(.15+(S.om[i]>20?.25:0))*f);
+    S.ph[i]-=sc.acid?.02*(1-Math.min(S.om[i],60)/60):.004;
+    if(S.om[i]>30)S.ph[i]+=(6.8-S.ph[i])*.03;
+    S.ph[i]=clamp(S.ph[i],3,9);
+    S.om[i]=Math.max(0,S.om[i]-S.om[i]*.006);
+    S.n[i]=Math.max(0,S.n[i]-S.n[i]*.008);
+  }
+  // szervezetek
+  const deaths=[],spawn=[];
+  for(let i=0;i<N;i++){
+    const s=occ[i];if(s<0)continue;
+    const sp=SPECIES[s];
+    const ev=evaluate(sp,i);
+    const bad=ev.filter(e=>!e.ok);
+    stress[i]=bad.length?1:0;
+    if(bad.length){hp[i]-=15*(bad.length>1?1.5:1);reason[i]=bad.map(needTxt).join('; ');}
+    else hp[i]=Math.min(100,hp[i]+12);
+    if(hp[i]<=0){deaths.push(i);continue;}
+    if(hp[i]>=40){
+      const e=f*hp[i]/100;
+      switch(sp.id){
+        case 'psz':addFx(i,'org',-8*e,-2.5*e);addFx(i,'om',.5*e,0);break;
+        case 'perje':addFx(i,'om',1.2*e,.2*e);addFx(i,'water',.4*e,0);addFx(i,'met',-.3*e,0);break;
+        case 'lohere':addFx(i,'n',4*e,1.5*e);addFx(i,'om',.9*e,0);break;
+        case 'napraf':addFx(i,'met',-6*e,-1.2*e);addFx(i,'om',.8*e,0);addFx(i,'water',-e,0);addFx(i,'n',-.5*e,0);break;
+        case 'fuzfa':addFx(i,'met',-9*e,-3*e);addFx(i,'water',-2.5*e,-e);addFx(i,'om',2.2*e,.8*e);addFx(i,'n',-e,0);addFx(i,'org',-.8*e,0);break;
+        case 'myco':addFx(i,'n',1.5*e,1.5*e);addFx(i,'water',0,e);addFx(i,'om',.3*e,0);break;
+        case 'giliszta':addFx(i,'om',1.5*e,.8*e);addFx(i,'water',1.5*e,0);addFx(i,'n',.8*e,0);break;
+        case 'bogar':addFx(i,'om',2*e,e);addFx(i,'n',e,0);addFx(i,'water',.8*e,0);break;
+        case 'nyir':addFx(i,'om',3*e,e);addFx(i,'water',-2*e,.5*e);addFx(i,'n',-1.2*e,0);addFx(i,'met',-2*e,0);break;
+      }
+    }
+    if(sp.spread&&hp[i]>=90&&Math.random()<sp.spread*f){
+      const free=NBR[i].filter(j=>occ[j]<0);
+      if(free.length){const j=free[(Math.random()*free.length)|0];if(evaluate(sp,j).every(e=>e.ok))spawn.push([j,s]);}
+    }
+  }
+  for(let i=0;i<N;i++){
+    S.om[i]=clamp(S.om[i]+D.om[i],0,100);S.n[i]=clamp(S.n[i]+D.n[i],0,100);
+    S.water[i]=clamp(S.water[i]+D.water[i],0,100);
+    S.org[i]=Math.max(0,S.org[i]+D.org[i]);S.met[i]=Math.max(0,S.met[i]+D.met[i]);
+  }
+  for(const i of deaths){
+    const sp=SPECIES[occ[i]];
+    log(sp.name+' elpusztult '+cname(i)+'. Hiányzott: '+(reason[i]||'—')+'.','bad');
+    occ[i]=-1;hp[i]=0;stress[i]=0;S.om[i]=Math.min(100,S.om[i]+4);
+  }
+  for(const [j,s] of spawn){if(occ[j]<0){occ[j]=s;hp[j]=60;log(SPECIES[s].name+' magától terjedt '+cname(j)+'.','good');}}
+  // megtelepedés
+  for(let i=0;i<N;i++){
+    if(occ[i]>=0&&hp[i]>=90&&!established.has(occ[i])){
+      established.add(occ[i]);energy+=8;
+      log('Új faj megtelepedett: '+SPECIES[occ[i]].name+'. +8 bioenergia.','good');
+    }
+  }
+  const alive=aliveSet();
+  let healthy=0;for(let i=0;i<N;i++)if(occ[i]>=0&&hp[i]>=50)healthy++;
+  lastIncome=1.2+.12*healthy;energy+=lastIncome;
+  shi=globalSHI();
+  if(shi>=sc.target&&alive.size>=NEED_SPECIES)hold++;else hold=0;
+  if(hold>=HOLD_NEED)finish(true);
+  else if(month>=sc.max)finish(false);
+  ui();
+}
+
+/* ---------- actions ---------- */
+function toast(t){$('#toast').textContent=t;clearTimeout(msgT);msgT=setTimeout(()=>{$('#toast').textContent='';},3500);}
+function applyTool(i){
+  if(over||i<0)return;
+  const t=TOOLS[tool];
+  if(t.id==='inspect')return;
+  if(t.id==='remove'){
+    if(occ[i]>=0){log(SPECIES[occ[i]].name+' kiszedve '+cname(i)+'.','');occ[i]=-1;hp[i]=0;stress[i]=0;}
+    ui();return;
+  }
+  if(energy<t.cost){toast('Nincs elég bioenergia ('+t.cost+' kell).');return;}
+  if(t.sp!==undefined){
+    if(occ[i]>=0){toast('A cella foglalt. Előbb szedd ki a fajt.');return;}
+    occ[i]=t.sp;hp[i]=70;stress[i]=0;reason[i]='';
+    const bad=evaluate(SPECIES[t.sp],i).filter(e=>!e.ok);
+    if(bad.length)toast('Figyelem: itt hiányzik: '+bad.map(needTxt).join('; ')+'.');
+  }else if(t.id==='lime'){
+    S.ph[i]=Math.min(8.6,S.ph[i]+1.4);for(const j of NBR[i])S.ph[j]=Math.min(8.6,S.ph[j]+.5);
+  }else if(t.id==='compost'){
+    S.om[i]=Math.min(100,S.om[i]+22);S.n[i]=Math.min(100,S.n[i]+5);S.water[i]=Math.min(100,S.water[i]+6);
+    S.org[i]*=.92;S.met[i]*=.92;
+    for(const j of NBR[i]){S.om[j]=Math.min(100,S.om[j]+6);S.n[j]=Math.min(100,S.n[j]+1.5);}
+  }else if(t.id==='water'){
+    S.water[i]=Math.min(100,S.water[i]+25);for(const j of NBR[i])S.water[j]=Math.min(100,S.water[j]+8);
+  }
+  energy-=t.cost;
+  shi=globalSHI();
+  ui();
+}
+function select(i){selected=i;ui();}
+
+/* ---------- log / ui ---------- */
+function log(text,cls){logArr.unshift({m:month,text,cls:cls||''});if(logArr.length>60)logArr.pop();}
+function dateStr(){const mi=(sc.start+month)%12;const y=Math.floor((sc.start+month)/12);return y+1+'. év · '+MONTHS[mi];}
+
+function barRow(label,v,max,cls,txt){
+  return '<div class="row"><span>'+label+'</span><div class="bar"><i class="'+cls+'" style="width:'+clamp(v/max*100,0,100)+'%"></i></div><span class="v">'+txt+'</span></div>';
+}
+const lowBad=(v,a,b)=>v>=b?'good':v>=a?'mid':'bad';
+const highBad=(v,a,b)=>v<=a?'good':v<=b?'mid':'bad';
+
+function reqList(sp,i){
+  const ev=evaluate(sp,i);
+  return '<ul class="req">'+ev.map(e=>{
+    const have=e.nb?(e.ok?'van':'nincs'):fmt(e.r.k,e.v);
+    return '<li><span class="'+(e.ok?'ok':'no')+'">'+(e.ok?'✓':'✗')+'</span><span>'+needTxt(e)+(e.helped?' <small>(mikorrhiza segít)</small>':'')+'</span><span class="hv">'+have+'</span></li>';
+  }).join('')+'</ul>';
+}
+
+function renderInspector(){
+  const el=$('#insp');
+  if(selected<0){el.innerHTML='<h2>Mintavételi lap</h2><p style="margin:0;color:var(--muted)">Koppints egy cellára a talajtérképen. Itt látod a mért értékeket, a telepítés feltételeit és az ott élő faj állapotát.</p>';return;}
+  const i=selected,t=TOOLS[tool],T=effMet(i);
+  let h='<div class="insp-h"><b>Cella '+cname(i)+'</b><span class="num" title="Cella talajegészség">'+Math.round(cellSHI(i)*100)+' / 100</span></div>';
+  h+='<div class="rows">'
+   +barRow('Olajszennyezés',S.org[i],100,highBad(S.org[i],15,40),fmt('org',S.org[i]))
+   +barRow('Fém (hozzáférhető)',T,100,highBad(T,20,50),fmt('met',T)+' / '+fmt('met',S.met[i]))
+   +barRow('pH',S.ph[i]-3,6,(S.ph[i]>=5.8&&S.ph[i]<=7.6)?'good':(S.ph[i]>=5&&S.ph[i]<=8.2)?'mid':'bad',fmt('ph',S.ph[i]))
+   +barRow('Szerves anyag',S.om[i],60,lowBad(S.om[i],15,30),fmt('om',S.om[i]))
+   +barRow('Nitrogén',S.n[i],50,lowBad(S.n[i],10,25),fmt('n',S.n[i]))
+   +barRow('Víz',S.water[i],70,lowBad(S.water[i],20,35),fmt('water',S.water[i]))
+   +'</div>';
+  if(occ[i]>=0){
+    const sp=SPECIES[occ[i]];
+    h+='<h2 class="sub-h">Itt él: '+sp.name+'</h2>';
+    h+=barRow('Egészség',hp[i],100,hp[i]>60?'good':hp[i]>30?'mid':'bad',Math.round(hp[i]));
+    h+=reqList(sp,i);
+    if(stress[i])h+='<p class="verdict" style="color:var(--bad)">Stresszes: '+reason[i]+'.</p>';
+    else h+='<p class="verdict" style="color:var(--muted)">Minden igénye teljesül.</p>';
+  }else if(t.sp!==undefined){
+    const sp=SPECIES[t.sp];
+    h+='<h2 class="sub-h">Telepítés előnézet: '+sp.name+'</h2>'+reqList(sp,i);
+    const bad=evaluate(sp,i).filter(e=>!e.ok).length;
+    h+='<p class="verdict" style="color:'+(bad?'var(--bad)':'var(--accent)')+'">'+(bad?bad+' feltétel nem teljesül, a faj itt legyengül és elpusztul.':'Minden feltétel teljesül.')+'</p>';
+  }else if(t.id!=='inspect'&&t.id!=='remove'){
+    h+='<h2 class="sub-h">'+t.name+'</h2><p class="verdict">'+t.role+'</p>';
+  }
+  if(t.id!=='inspect'){
+    const can=!over&&energy>=t.cost&&(t.sp===undefined||occ[i]<0);
+    h+='<button class="primary" id="bApply"'+(can||t.id==='remove'?'':' disabled')+'>'+(t.id==='remove'?'Kiszed':t.name+' ide')+(t.cost?' · '+t.cost+' energia':'')+'</button>';
+  }
+  el.innerHTML=h;
+  const b=$('#bApply');if(b)b.onclick=()=>applyTool(selected);
+}
+
+function ui(){
+  $('#dateLbl').textContent=dateStr();
+  shi=globalSHI();
+  $('#shiNum').textContent=shi.toFixed(0);
+  $('#shiFill').style.width=clamp(shi,0,100)+'%';
+  $('#shiMark').style.left=sc.target+'%';
+  $('#shiTgt').textContent='cél: '+sc.target+' fölött, legalább '+NEED_SPECIES+' faj, '+HOLD_NEED+' hónapig';
+  $('#hold').innerHTML='<span class="lbl" style="margin-right:6px">Tartás</span>'+Array.from({length:HOLD_NEED},(_,k)=>'<span class="pip'+(k<hold?' on':'')+'"></span>').join('')+'<span style="margin-left:6px">hátra: '+Math.max(0,sc.max-month)+' hónap</span>';
+  $('#enNum').textContent=energy.toFixed(1);
+  $('#enSub').textContent='+'+lastIncome.toFixed(1)+' / hónap';
+  const al=aliveSet();
+  $('#chips').innerHTML=SPECIES.map((s,k)=>'<span class="chip'+(al.has(k)?' on':'')+'" title="'+s.name+'"><img alt="" src="'+ICON[s.icon]+'">'+s.name+'</span>').join('');
+  $('#log').innerHTML=logArr.slice(0,40).map(l=>'<li><span class="t">'+(l.m?l.m+'. hó':'—')+'</span><span class="'+l.cls+'">'+l.text+'</span></li>').join('');
+  document.querySelectorAll('.tool').forEach((b,k)=>{b.setAttribute('aria-pressed',String(+b.dataset.k===tool));b.disabled=over;});
+  renderInspector();
+}
+
+/* ---------- icons ---------- */
+function drawIcon(c,type,cx,cy,s,t,disc){
+  c.save();c.translate(cx,cy);c.scale(s,s);c.lineCap='round';c.lineJoin='round';
+  if(disc){c.fillStyle='rgba(12,16,10,.55)';c.beginPath();c.arc(0,0,.44,0,7);c.fill();}
+  const sw=reduce?0:Math.sin(t/700+cx*.05)*.03;
+  switch(type){
+  case 'grass':
+    c.strokeStyle='#9bdc6e';c.lineWidth=.055;
+    [[-.2,-.22],[0,-.3],[.2,-.22],[-.08,-.12],[.1,-.14]].forEach((p,k)=>{c.beginPath();c.moveTo((k-2)*.07,.24);c.quadraticCurveTo((k-2)*.07,0,p[0]+sw*(1+k%2),p[1]);c.stroke();});break;
+  case 'clover':
+    c.strokeStyle='#4f9a56';c.lineWidth=.05;c.beginPath();c.moveTo(0,.3);c.lineTo(sw,.02);c.stroke();
+    c.fillStyle='#7fd48a';[[0,-.16],[-.15,0],[.15,0]].forEach(p=>{c.beginPath();c.arc(p[0]+sw,p[1],.13,0,7);c.fill();});
+    c.fillStyle='#e8f5e0';c.beginPath();c.arc(sw,-.04,.035,0,7);c.fill();break;
+  case 'sun':
+    c.strokeStyle='#5aa04a';c.lineWidth=.05;c.beginPath();c.moveTo(0,.34);c.lineTo(sw,.08);c.stroke();
+    c.save();c.translate(sw,-.06);c.fillStyle='#f4c430';
+    for(let k=0;k<10;k++){c.rotate(Math.PI/5);c.beginPath();c.ellipse(0,-.17,.05,.1,0,0,7);c.fill();}
+    c.fillStyle='#6b4423';c.beginPath();c.arc(0,0,.11,0,7);c.fill();c.restore();break;
+  case 'willow':
+    c.strokeStyle='#9a7b57';c.lineWidth=.07;c.beginPath();c.moveTo(0,.34);c.lineTo(0,-.05);c.stroke();
+    c.strokeStyle='#b4dd8f';c.lineWidth=.035;
+    for(let k=-2;k<=2;k++){c.beginPath();c.moveTo(0,-.08);c.quadraticCurveTo(k*.14,-.3,k*.17+sw*k,.2);c.stroke();}break;
+  case 'birch':
+    c.strokeStyle='#efefe6';c.lineWidth=.08;c.beginPath();c.moveTo(0,.34);c.lineTo(0,-.06);c.stroke();
+    c.strokeStyle='#2b2b2b';c.lineWidth=.025;[.2,.1,0,.28].forEach(y=>{c.beginPath();c.moveTo(-.03,y);c.lineTo(.03,y);c.stroke();});
+    c.fillStyle='#a5d36a';c.beginPath();c.arc(sw,-.2,.17,0,7);c.fill();
+    c.fillStyle='#86b94f';c.beginPath();c.arc(sw-.06,-.14,.09,0,7);c.fill();break;
+  case 'bact':
+    c.fillStyle='#d9e24a';[[-.15,-.08,.5],[.12,-.15,-.4],[.02,.1,1.2],[-.12,.16,-.9],[.18,.08,.2]].forEach(p=>{
+      c.save();c.translate(p[0],p[1]);c.rotate(p[2]);c.beginPath();c.ellipse(0,0,.1,.045,0,0,7);c.fill();c.restore();});break;
+  case 'myco':
+    c.strokeStyle='#f3e2c2';c.lineWidth=.03;
+    [[-.3,-.1],[.3,-.15],[-.2,.25],[.25,.22],[0,-.32]].forEach(p=>{c.beginPath();c.moveTo(0,0);c.quadraticCurveTo(p[0]*.4+.04,p[1]*.4-.05,p[0],p[1]);c.stroke();c.fillStyle='#f3e2c2';c.beginPath();c.arc(p[0],p[1],.035,0,7);c.fill();});
+    c.fillStyle='#e7c58f';c.beginPath();c.arc(0,0,.07,0,7);c.fill();break;
+  case 'worm':
+    c.strokeStyle='#e88f8f';c.lineWidth=.09;c.beginPath();c.moveTo(-.3,.12);c.bezierCurveTo(-.2,-.2,-.05,.3,.08,-.02);c.bezierCurveTo(.16,-.2,.24,-.12,.3,-.2);c.stroke();
+    c.strokeStyle='#f6c4c4';c.lineWidth=.02;c.beginPath();c.moveTo(-.28,.1);c.bezierCurveTo(-.2,-.17,-.05,.27,.08,-.04);c.stroke();break;
+  case 'beetle':
+    c.fillStyle='#27323a';c.strokeStyle='#d5dde2';c.lineWidth=.025;
+    c.beginPath();c.ellipse(0,.03,.15,.2,0,0,7);c.fill();c.stroke();
+    c.beginPath();c.moveTo(0,-.17);c.lineTo(0,.23);c.stroke();
+    c.beginPath();c.arc(0,-.22,.07,0,7);c.fill();c.stroke();
+    [-.06,.04,.14].forEach(y=>{c.beginPath();c.moveTo(-.14,y);c.lineTo(-.26,y-.05);c.moveTo(.14,y);c.lineTo(.26,y-.05);c.stroke();});break;
+  case 'lime':
+    c.fillStyle='#e6eef2';[[-.18,.15],[0,.15],[.18,.15],[-.09,.03],[.09,.03],[0,-.09]].forEach(p=>{c.beginPath();c.arc(p[0],p[1],.095,0,7);c.fill();});break;
+  case 'compost':
+    c.fillStyle='#6b4326';c.beginPath();c.ellipse(0,.12,.3,.2,0,Math.PI,0);c.lineTo(.3,.2);c.lineTo(-.3,.2);c.fill();
+    c.fillStyle='#3d2514';[[-.12,.08],[.1,.1],[0,.0]].forEach(p=>{c.beginPath();c.arc(p[0],p[1],.03,0,7);c.fill();});
+    c.fillStyle='#7fd48a';c.beginPath();c.ellipse(.05,-.16,.06,.1,.6,0,7);c.fill();break;
+  case 'drop':
+    c.fillStyle='#58a8e8';c.beginPath();c.moveTo(0,-.3);c.bezierCurveTo(.2,-.05,.2,.22,0,.25);c.bezierCurveTo(-.2,.22,-.2,-.05,0,-.3);c.fill();break;
+  case 'remove':
+    c.strokeStyle='#e0735f';c.lineWidth=.07;c.beginPath();c.moveTo(-.18,-.18);c.lineTo(.18,.18);c.moveTo(.18,-.18);c.lineTo(-.18,.18);c.stroke();break;
+  case 'inspect':
+    c.strokeStyle='#cfe3d0';c.lineWidth=.06;c.beginPath();c.arc(-.05,-.05,.17,0,7);c.stroke();c.beginPath();c.moveTo(.08,.08);c.lineTo(.26,.26);c.stroke();break;
+  }
+  c.restore();
+}
+const ICON={};
+['grass','clover','sun','willow','birch','bact','myco','worm','beetle','lime','compost','drop','remove','inspect'].forEach(k=>{
+  const c=document.createElement('canvas');c.width=c.height=80;drawIcon(c.getContext('2d'),k,40,40,72,0,true);ICON[k]=c.toDataURL();
+});
+
+/* ---------- canvas ---------- */
+const cv=$('#cv'),ctx=cv.getContext('2d');
+let DPR=1;
+function resize(){DPR=Math.min(window.devicePixelRatio||1,2);const w=Math.round(cv.clientWidth*DPR);if(w&&cv.width!==w){cv.width=w;cv.height=w;}}
+if(window.ResizeObserver)new ResizeObserver(resize).observe(cv);window.addEventListener('resize',resize);
+
+const lerp=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
+function ramp(st,t){t=clamp(t,0,1);for(let k=1;k<st.length;k++){if(t<=st[k][0]){const a=st[k-1],b=st[k];return lerp(a[1],b[1],(t-a[0])/(b[0]-a[0]));}}return st[st.length-1][1];}
+const rgb=c=>'rgb('+(c[0]|0)+','+(c[1]|0)+','+(c[2]|0)+')';
+const RAMPS={
+  org:[[0,[58,110,74]],[.35,[190,170,60]],[.7,[190,95,50]],[1,[80,28,70]]],
+  ph:[[0,[200,60,40]],[.33,[225,160,50]],[.5,[110,170,80]],[.62,[70,150,90]],[.73,[90,160,140]],[1,[90,90,190]]],
+  om:[[0,[176,164,136]],[1,[44,28,18]]],
+  n:[[0,[206,200,164]],[1,[30,120,90]]],
+  water:[[0,[204,184,132]],[1,[40,100,170]]]
+};
+RAMPS.met=RAMPS.org;
+const VIEWS=[
+  ['soil','Talaj',null],['org','Olaj',{lo:'0',hi:'100',f:i=>S.org[i]/100}],['met','Fém',{lo:'0',hi:'100',f:i=>effMet(i)/100}],
+  ['ph','pH',{lo:'3',hi:'9',f:i=>(S.ph[i]-3)/6}],['om','Szerves',{lo:'0',hi:'60',f:i=>S.om[i]/60}],
+  ['n','Nitrogén',{lo:'0',hi:'50',f:i=>S.n[i]/50}],['water','Víz',{lo:'0',hi:'70',f:i=>S.water[i]/70}]
+];
+function soilColor(i){
+  let c=lerp([138,126,108],[44,30,20],clamp(S.om[i]/50,0,1));
+  c=lerp(c,[36,38,50],clamp(S.org[i]/100,0,1)*.75);
+  c=lerp(c,[160,138,64],clamp(effMet(i)/100,0,1)*.7);
+  return lerp(c,[c[0]*.75,c[1]*.82,c[2]*.95],clamp(S.water[i]/100,0,1)*.6);
+}
+let themeCache={t:0,accent:'#8bcf62'};
+function draw(t){
+  requestAnimationFrame(draw);
+  if(document.hidden||!S||!cv.width)return;
+  const w=cv.width,cs=w/W;
+  if(t-themeCache.t>500){themeCache={t,accent:getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()||'#8bcf62'};}
+  const vd=VIEWS.find(v=>v[0]===view);
+  ctx.clearRect(0,0,w,w);
+  for(let i=0;i<N;i++){
+    const x=(i%W)*cs,y=((i/W)|0)*cs;
+    ctx.fillStyle=rgb(vd[2]?ramp(RAMPS[view],vd[2].f(i)):soilColor(i));
+    ctx.fillRect(x,y,cs,cs);
+    if(!vd[2]&&Math.max(S.org[i],effMet(i))>45){
+      ctx.save();ctx.beginPath();ctx.rect(x,y,cs,cs);ctx.clip();ctx.strokeStyle='rgba(0,0,0,.22)';ctx.lineWidth=Math.max(1,DPR);
+      const sp=cs/6;for(let k=-6;k<12;k++){ctx.beginPath();ctx.moveTo(x+k*sp,y+cs);ctx.lineTo(x+k*sp+cs,y);ctx.stroke();}ctx.restore();
+    }
+    ctx.strokeStyle='rgba(0,0,0,.3)';ctx.lineWidth=Math.max(1,DPR);ctx.strokeRect(x+.5,y+.5,cs-1,cs-1);
+    if(occ[i]>=0){
+      drawIcon(ctx,SPECIES[occ[i]].icon,x+cs/2,y+cs/2,cs*.92,t,true);
+      const bw=cs*.6,bh=Math.max(3,cs*.05),bx=x+(cs-bw)/2,by=y+cs-bh-cs*.06;
+      ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(bx,by,bw,bh);
+      ctx.fillStyle=hp[i]>60?'#7fd05a':hp[i]>30?'#e0a040':'#e5533d';ctx.fillRect(bx,by,bw*clamp(hp[i]/100,0,1),bh);
+      if(stress[i]){ctx.fillStyle='#e5533d';ctx.beginPath();ctx.arc(x+cs*.85,y+cs*.15,cs*.09,0,7);ctx.fill();ctx.fillStyle='#fff';ctx.font='700 '+(cs*.13)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('!',x+cs*.85,y+cs*.16);}
+    }
+  }
+  if(selected>=0){
+    const x=(selected%W)*cs,y=((selected/W)|0)*cs,lw=Math.max(3,3*DPR);
+    ctx.strokeStyle=themeCache.accent;ctx.lineWidth=lw;ctx.strokeRect(x+lw/2,y+lw/2,cs-lw,cs-lw);
+    ctx.strokeStyle='rgba(0,0,0,.6)';ctx.lineWidth=1;ctx.strokeRect(x+lw+.5,y+lw+.5,cs-2*lw-1,cs-2*lw-1);
+  }
+}
+function cellAt(ev){
+  const r=cv.getBoundingClientRect();
+  const x=Math.floor((ev.clientX-r.left)/r.width*W),y=Math.floor((ev.clientY-r.top)/r.height*H);
+  return x<0||y<0||x>=W||y>=H?-1:y*W+x;
+}
+cv.addEventListener('pointerdown',ev=>{
+  const i=cellAt(ev);if(i<0)return;
+  if(i===selected&&tool!==0)applyTool(i);else select(i);
+});
+cv.addEventListener('keydown',ev=>{
+  const k=ev.key;let i=selected<0?0:selected;
+  if(k==='ArrowLeft'&&i%W>0)i--;else if(k==='ArrowRight'&&i%W<W-1)i++;else if(k==='ArrowUp'&&i>=W)i-=W;else if(k==='ArrowDown'&&i<N-W)i+=W;
+  else if(k==='Enter'||k===' '){ev.preventDefault();if(selected>=0&&tool!==0)applyTool(selected);else select(i);return;}
+  else return;
+  ev.preventDefault();select(i);
+});
+
+/* ---------- controls ---------- */
+function setSpeed(s){
+  speed=s;clearInterval(timer);timer=null;
+  if(s>0&&!over)timer=setInterval(tick,s===1?1300:450);
+  $('#bPause').setAttribute('aria-pressed',String(s===0));
+  $('#b1').setAttribute('aria-pressed',String(s===1));
+  $('#b3').setAttribute('aria-pressed',String(s===3));
+}
+$('#bPause').onclick=()=>setSpeed(0);
+$('#b1').onclick=()=>setSpeed(1);
+$('#b3').onclick=()=>setSpeed(3);
+$('#bStep').onclick=()=>{setSpeed(0);tick();};
+
+function buildPalette(){
+  const groups={};
+  TOOLS.forEach((t,k)=>{(groups[t.group]=groups[t.group]||[]).push([t,k]);});
+  const order=['Eszköz','Talajjavítás','Mikrobák és gombák','Növények','Állatok'];
+  const box=$('#palette');box.innerHTML='';
+  const pick=['inspect','lime','compost','water','remove'];
+  const rows=[['Eszközök és talajjavítás',pick.map(id=>toolIdx[id])],['Mikrobák és gombák',TOOLS.map((t,k)=>k).filter(k=>TOOLS[k].group==='Mikrobák és gombák')],['Növények',TOOLS.map((t,k)=>k).filter(k=>TOOLS[k].group==='Növények')],['Állatok',TOOLS.map((t,k)=>k).filter(k=>TOOLS[k].group==='Állatok')]];
+  rows.forEach(([name,ks])=>{
+    const g=document.createElement('div');g.className='pg';
+    g.innerHTML='<span class="lbl">'+name+'</span>';
+    const r=document.createElement('div');r.className='prow';
+    ks.forEach(k=>{
+      const t=TOOLS[k],b=document.createElement('button');b.className='tool';b.dataset.k=k;b.setAttribute('aria-pressed',String(k===tool));
+      b.innerHTML='<img alt="" src="'+ICON[t.icon]+'"><span class="nm">'+t.name+'</span><span class="co">'+(t.cost?t.cost+' en.':'ingyen')+'</span>';
+      b.onclick=()=>{tool=k;ui();};
+      r.appendChild(b);
+    });
+    g.appendChild(r);box.appendChild(g);
+  });
+}
+function buildViews(){
+  const v=$('#views');v.innerHTML='';
+  VIEWS.forEach(x=>{const b=document.createElement('button');b.textContent=x[1];b.setAttribute('aria-pressed',String(x[0]===view));b.onclick=()=>{view=x[0];buildViews();legend();};v.appendChild(b);});
+}
+function legend(){
+  const vd=VIEWS.find(v=>v[0]===view),el=$('#legend');
+  if(!vd[2]){el.innerHTML='<span>Sötét: sok szerves anyag. Szürkés, olajos vagy sárgás: szennyezett. Csíkozott: veszélyes.</span>';return;}
+  const g=[0,.25,.5,.75,1].map(t=>rgb(ramp(RAMPS[view],t))).join(',');
+  const unit=view==='ph'?'':'';
+  el.innerHTML='<span class="num">'+vd[2].lo+unit+'</span><i style="background:linear-gradient(90deg,'+g+')"></i><span class="num">'+vd[2].hi+unit+'</span><span>'+vd[1]+'</span>';
+}
+
+/* ---------- overlays ---------- */
+function best(id){try{return JSON.parse(localStorage.getItem('talaj-best')||'{}')[id];}catch(e){return null;}}
+function saveBest(id,score,months){try{const o=JSON.parse(localStorage.getItem('talaj-best')||'{}');if(!o[id]||o[id].score<score){o[id]={score,months};localStorage.setItem('talaj-best',JSON.stringify(o));}}catch(e){}}
+function buildMenu(){
+  $('#scs').innerHTML=SC.map(s=>{const b=best(s.id);return '<button data-id="'+s.id+'"><em>'+s.diff.toUpperCase()+' · '+s.max+' hónap</em><b>'+s.name+'</b><span>'+s.blurb+'</span>'+(b?'<em>Legjobb: '+b.score+' pont, '+b.months+' hónap</em>':'')+'</button>';}).join('');
+  $('#scs').querySelectorAll('button').forEach(b=>b.onclick=()=>{newGame(b.dataset.id);$('#ovStart').hidden=true;$('#ovEnd').hidden=true;});
+}
+function finish(win){
+  over=true;setSpeed(0);
+  const alive=aliveSet().size;
+  const score=win?Math.round(shi*10+(sc.max-month)*3+alive*20+energy):0;
+  if(win){saveBest(sc.id,score,month);log('A terep újra él.','good');}
+  buildMenu();
+  $('#endCard').innerHTML='<h2 class="big">'+(win?'Újra él a talaj':'Lejárt az idő')+'</h2>'
+   +'<p>'+(win?'A '+sc.name.toLowerCase()+' talaja stabilan egészséges, és legalább '+NEED_SPECIES+' faj él rajta együtt.':'A terep nem érte el a célt a rendelkezésre álló '+sc.max+' hónap alatt. Nézd meg a naplót: melyik faj dőlt ki először, és miért?')+'</p>'
+   +'<div class="endstats"><div><span class="lbl">Idő</span><span class="num">'+month+' hónap</span></div><div><span class="lbl">Index</span><span class="num">'+shi.toFixed(0)+'</span></div><div><span class="lbl">Fajok</span><span class="num">'+alive+'</span></div>'+(win?'<div><span class="lbl">Pont</span><span class="num">'+score+'</span></div>':'')+'</div>'
+   +'<div class="btnrow"><button class="primary" id="bAgain" style="width:auto">Újra ugyanez a terep</button><button id="bOther">Másik terep</button><button id="bLook">Térkép megtekintése</button></div>';
+  $('#ovEnd').hidden=false;
+  $('#bAgain').onclick=()=>{newGame(sc.id);$('#ovEnd').hidden=true;};
+  $('#bOther').onclick=()=>{$('#ovEnd').hidden=true;$('#ovStart').hidden=false;};
+  $('#bLook').onclick=()=>{$('#ovEnd').hidden=true;};
+  ui();
+}
+function buildCodex(){
+  const reqTxt=sp=>sp.reqs.map(r=>r.nb?r.label:needTxt({r,label:LBL[r.k],min:r.min,max:r.max})).join(' · ');
+  $('#codex').innerHTML=TOOLS.filter(t=>t.id!=='inspect'&&t.id!=='remove').map(t=>{
+    const sp=t.sp!==undefined?SPECIES[t.sp]:null;
+    return '<article><img alt="" src="'+ICON[t.icon]+'"><h3>'+t.name+' <small style="color:var(--muted);font-weight:400">· '+t.group+' · '+t.cost+' energia</small></h3><p>'+t.role+'</p>'+(sp?'<p class="rq">'+reqTxt(sp)+'</p>':'')+'</article>';
+  }).join('');
+}
+$('#bCodex').onclick=()=>{$('#ovCodex').hidden=false;};
+$('#bCodexClose').onclick=()=>{$('#ovCodex').hidden=true;};
+$('#bMenu').onclick=()=>{setSpeed(0);$('#ovStart').hidden=false;};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#ovCodex').hidden=true;if(S)$('#ovStart').hidden=true;}});
+
+buildPalette();buildViews();legend();buildCodex();buildMenu();
+newGame('olaj');
+resize();requestAnimationFrame(draw);
+window.__eco={tick,applyTool:(i,t)=>{tool=toolIdx[t];applyTool(i);},state:()=>({S,occ,hp,energy,shi:globalSHI(),month,hold,alive:aliveSet().size,over}),newGame,SC,evaluate,SPECIES,TOOLS};
+})();
+</script>
