@@ -674,7 +674,7 @@ cv.addEventListener('keydown',ev=>{
 /* ---------- controls ---------- */
 function setSpeed(s){
   speed=s;clearInterval(timer);timer=null;
-  if(s>0&&!over)timer=setInterval(tick,s===1?1300:450);
+  if(s>0&&!over)timer=setInterval(tick,s===1?3200:1100);
   $('#bPause').setAttribute('aria-pressed',String(s===0));
   $('#b1').setAttribute('aria-pressed',String(s===1));
   $('#b3').setAttribute('aria-pressed',String(s===3));
