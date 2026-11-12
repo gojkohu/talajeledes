@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f6b5c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Célpont Riasztó</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Egyképernyős app: térkép felül, vezérlőpult alul */
+:root {
+  --bg: #f3f6f5; --panel: #ffffff; --fg: #15211e; --muted: #5d6e69;
+  --accent: #0f6b5c; --accent-fg: #ffffff; --line: #d9e2df;
+  --ok: #1f8a4c; --alarm: #c2362b;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0d1513; --panel: #16211e; --fg: #e6efec; --muted: #94a8a2;
+    --accent: #3fbfa6; --accent-fg: #06201b; --line: #26352f; --ok: #4cc37f; --alarm: #ff6a5c; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.4 var(--font); display: flex; flex-direction: column; }
+#map { flex: 1; min-height: 200px; }
+.panel {
+  background: var(--panel); border-top: 1px solid var(--line);
+  padding: 14px max(16px, env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  display: flex; flex-direction: column; gap: 12px;
+}
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row > * { min-width: 0; }
+input[type=text] {
+  flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--fg); font: inherit;
+}
+button {
+  font: inherit; font-weight: 600; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--fg); cursor: pointer;
+}
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); flex: 1; padding: 14px; font-size: 17px; }
+button.stop { background: var(--alarm); color: #fff; border-color: var(--alarm); }
+button:disabled { opacity: .5; cursor: default; }
+.status { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.dist { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.msg { color: var(--muted); font-size: 13px; }
+.radius { display: flex; align-items: center; gap: 10px; }
+.radius input { flex: 1; accent-color: var(--accent); }
+.radius output { font-variant-numeric: tabular-nums; min-width: 56px; text-align: right; font-weight: 600; }
+a.link { color: var(--accent); font-weight: 600; text-decoration: none; font-size: 14px; }
+.alarm-overlay {
+  position: fixed; inset: 0; background: var(--alarm); color: #fff; z-index: 2000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px;
+  padding: 24px; text-align: center; animation: pulse 1s infinite alternate;
+}
+.alarm-overlay h1 { font-size: 40px; margin: 0; }
+.alarm-overlay button { background: #fff; color: var(--alarm); border: 0; font-size: 22px; padding: 18px 40px; }
+@keyframes pulse { from { filter: brightness(1); } to { filter: brightness(1.25); } }
+@media (prefers-reduced-motion: reduce) { .alarm-overlay { animation: none; } }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel">
+  <div class="row">
+    <input id="q" type="text" placeholder="Cím, vagy Google Maps koordináta / link" autocomplete="off">
+    <button id="go">Keres</button>
+  </div>
+  <div class="status">
+    <div>
+      <div class="label">Távolság a célig</div>
+      <div class="dist" id="dist">–</div>
+    </div>
+    <a class="link" id="gmaps" href="#" target="_blank" rel="noopener" hidden>Útvonal Google Mapsben ↗</a>
+  </div>
+  <div class="radius">
+    <span class="label">Sugár</span>
+    <input id="radius" type="range" min="20" max="1000" step="10" value="100">
+    <output id="radiusOut">100 m</output>
+  </div>
+  <div class="row">
+    <button id="start" class="primary" disabled>Figyelés indítása</button>
+    <button id="test" title="Hang kipróbálása">🔊 Teszt</button>
+  </div>
+  <div class="msg" id="msg">Koppints a térképre a cél kijelöléséhez.</div>
+</div>
+
+<div class="alarm-overlay" id="alarm" hidden>
+  <h1>Megérkeztél!</h1>
+  <div id="alarmInfo"></div>
+  <button id="ack">Leállítás</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+
+let target = store.get('target');           // {lat, lng}
+let radius = store.get('radius') || 100;
+let watchId = null, wakeLock = null, audioCtx = null, beepTimer = null;
+let alarmed = false, me = null;
+
+const map = L.map('map', { zoomControl: true }).setView(target ? [target.lat, target.lng] : [47.4979, 19.0402], target ? 15 : 12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '&copy; OpenStreetMap'
+}).addTo(map);
+
+let targetMarker = null, circle = null, meMarker = null;
+
+function setTarget(lat, lng, pan) {
+  target = { lat, lng };
+  store.set('target', target);
+  if (!targetMarker) {
+    targetMarker = L.marker([lat, lng], { draggable: true }).addTo(map);
+    targetMarker.on('dragend', e => { const p = e.target.getLatLng(); setTarget(p.lat, p.lng); });
+    circle = L.circle([lat, lng], { radius, color: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(), weight: 2, fillOpacity: .12 }).addTo(map);
+  } else {
+    targetMarker.setLatLng([lat, lng]);
+    circle.setLatLng([lat, lng]);
+  }
+  if (pan) map.setView([lat, lng], Math.max(map.getZoom(), 15));
+  $('start').disabled = false;
+  $('gmaps').hidden = false;
+  $('gmaps').href = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  alarmed = false;
+  updateDistance();
+  if (watchId === null) msg('Cél kijelölve. Nyomd meg a „Figyelés indítása” gombot.');
+}
+
+map.on('click', e => setTarget(e.latlng.lat, e.latlng.lng));
+
+// Sugár
+function setRadius(r) {
+  radius = r;
+  store.set('radius', r);
+  $('radius').value = r;
+  $('radiusOut').textContent = r >= 1000 ? (r / 1000) + ' km' : r + ' m';
+  if (circle) circle.setRadius(r);
+  updateDistance();
+}
+$('radius').addEventListener('input', e => setRadius(+e.target.value));
+
+// Keresés: koordináta, Google Maps link vagy cím
+function parseCoords(s) {
+  s = decodeURIComponent(s);
+  let m = s.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) ||
+          s.match(/[?&](?:q|query|destination|ll)=(-?\d+\.\d+),\s*(-?\d+\.\d+)/) ||
+          s.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) ||
+          s.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if (!m) return null;
+  const lat = +m[1], lng = +m[2];
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng };
+}
+async function search() {
+  const q = $('q').value.trim();
+  if (!q) return;
+  const c = parseCoords(q);
+  if (c) { setTarget(c.lat, c.lng, true); return; }
+  if (/goo\.gl|maps\.app/.test(q)) {
+    msg('A rövid Google Maps linket nem tudom megnyitni. Google Mapsben nyomd hosszan a helyet, és másold be a megjelenő koordinátákat (pl. 47.4979, 19.0402).');
+    return;
+  }
+  msg('Keresés…');
+  try {
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=hu&q=' + encodeURIComponent(q));
+    const d = await r.json();
+    if (!d.length) { msg('Nincs találat erre: „' + q + '”.'); return; }
+    setTarget(+d[0].lat, +d[0].lon, true);
+  } catch { msg('A keresés nem sikerült. Ellenőrizd az internetkapcsolatot.'); }
+}
+$('go').addEventListener('click', search);
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+
+// Távolság (haversine)
+function distance(a, b) {
+  const R = 6371000, rad = x => x * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function fmt(m) { return m >= 1000 ? (m / 1000).toFixed(m >= 10000 ? 0 : 2) + ' km' : Math.round(m) + ' m'; }
+function msg(t) { $('msg').textContent = t; }
+
+function updateDistance() {
+  if (!target || !me) { $('dist').textContent = '–'; return; }
+  const d = distance(me, target);
+  $('dist').textContent = fmt(d);
+  $('dist').style.color = d <= radius ? 'var(--ok)' : '';
+  if (watchId !== null) {
+    if (d <= radius && !alarmed) triggerAlarm(d);
+    else if (d > radius * 1.5 && alarmed) alarmed = false;   // újra élesít, ha eltávolodtál
+  }
+}
+
+// Hang
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+function beep() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  [0, 0.25, 0.5].forEach((off, i) => {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'square';
+    o.frequency.value = i === 2 ? 1320 : 880;
+    g.gain.setValueAtTime(0.0001, t + off);
+    g.gain.exponentialRampToValueAtTime(0.5, t + off + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.2);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(t + off); o.stop(t + off + 0.22);
+  });
+}
+$('test').addEventListener('click', () => { ensureAudio(); beep(); if (navigator.vibrate) navigator.vibrate(200); });
+
+function triggerAlarm(d) {
+  alarmed = true;
+  ensureAudio();
+  beep();
+  clearInterval(beepTimer);
+  beepTimer = setInterval(() => { beep(); if (navigator.vibrate) navigator.vibrate([300, 100, 300]); }, 1200);
+  if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
+  $('alarmInfo').textContent = 'A cél ' + fmt(d) + ' távolságra van.';
+  $('alarm').hidden = false;
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try { new Notification('Megérkeztél!', { body: 'A cél ' + fmt(d) + ' távolságra van.', requireInteraction: true }); } catch {}
+  }
+}
+$('ack').addEventListener('click', () => {
+  clearInterval(beepTimer);
+  if (navigator.vibrate) navigator.vibrate(0);
+  $('alarm').hidden = true;
+  stopWatch();
+  msg('Riasztás leállítva. A figyelés véget ért.');
+});
+
+// Képernyő ébren tartása
+async function keepAwake() {
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && watchId !== null) { keepAwake(); ensureAudio(); }
+});
+
+// Figyelés
+function startWatch() {
+  if (!navigator.geolocation) { msg('Ez a böngésző nem támogatja a helymeghatározást.'); return; }
+  ensureAudio();
+  keepAwake();
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
+  alarmed = false;
+  msg('Helymeghatározás indul…');
+  watchId = navigator.geolocation.watchPosition(onPos, onErr, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+  $('start').textContent = 'Figyelés leállítása';
+  $('start').classList.add('stop');
+}
+function stopWatch() {
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  $('start').textContent = 'Figyelés indítása';
+  $('start').classList.remove('stop');
+}
+function onPos(p) {
+  me = { lat: p.coords.latitude, lng: p.coords.longitude };
+  if (!meMarker) {
+    meMarker = L.circleMarker([me.lat, me.lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#2a7de1', fillOpacity: 1 }).addTo(map);
+    if (target) map.fitBounds(L.latLngBounds([me.lat, me.lng], [target.lat, target.lng]), { padding: [40, 40], maxZoom: 16 });
+  } else meMarker.setLatLng([me.lat, me.lng]);
+  msg('Figyelés fut (pontosság: ±' + Math.round(p.coords.accuracy) + ' m). Hagyd nyitva az oldalt, a képernyő ébren marad.');
+  updateDistance();
+}
+function onErr(e) {
+  if (e.code === 1) { msg('A helymeghatározás le van tiltva. Engedélyezd a böngésző beállításaiban, majd indítsd újra.'); stopWatch(); }
+  else msg('Nem sikerült a helyzetedet lekérni, újrapróbálom…');
+}
+$('start').addEventListener('click', () => watchId === null ? startWatch() : (stopWatch(), msg('Figyelés leállítva.')));
+
+// Indulás
+setRadius(radius);
+if (target) setTarget(target.lat, target.lng);
+</script>
+</body>
+</html>
